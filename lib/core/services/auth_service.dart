@@ -20,6 +20,8 @@ class AuthService {
     required String enderecoUf,
     required String enderecoBairro,
     required String tipo,
+    String? numero,
+    String? complemento,
     double? latitude,
     double? longitude,
   }) async {
@@ -37,9 +39,71 @@ class AuthService {
           'endereco_cidade': enderecoCidade,
           'endereco_uf': enderecoUf,
           'endereco_bairro': enderecoBairro,
+          'numero': numero,
+          'complemento': complemento,
           'tipo': tipo,
           'latitude': latitude ?? 0.0,
           'longitude': longitude ?? 0.0,
+        },
+      );
+
+      if (response.status == 201 || response.status == 200) {
+        final data = response.data as Map<String, dynamic>;
+        return RegisterResponse.fromJson(data);
+      } else {
+        final data = response.data as Map<String, dynamic>?;
+        return RegisterResponse(
+          success: false,
+          message: data?['message'] ?? 'Erro ao criar conta',
+          notification: data?['notification'] ?? 'Erro ao processar cadastro',
+        );
+      }
+    } catch (e) {
+      return RegisterResponse(
+        success: false,
+        message: e.toString(),
+        notification: 'Erro ao conectar com o servidor. Verifique sua conexão.',
+      );
+    }
+  }
+
+  /// Registra um novo estúdio usando a Edge Function
+  Future<RegisterResponse> registerStudio({
+    required String email,
+    required String password,
+    required String nomeEstudio,
+    String? cnpj,
+    required String telefone,
+    required String enderecoCep,
+    required String enderecoRua,
+    required String enderecoCidade,
+    required String enderecoUf,
+    required String enderecoBairro,
+    String? enderecoNumero,
+    String? enderecoComplemento,
+    required String responsavelNome,
+    String? responsavelCpf,
+    String? responsavelTelefone,
+  }) async {
+    try {
+      final response = await client.functions.invoke(
+        'register-studio',
+        body: {
+          'email': email,
+          'password': password,
+          'nome_estudio': nomeEstudio,
+          'cnpj': cnpj,
+          'telefone': telefone,
+          'endereco_cep': enderecoCep,
+          'endereco_rua': enderecoRua,
+          'endereco_cidade': enderecoCidade,
+          'endereco_uf': enderecoUf,
+          'endereco_bairro': enderecoBairro,
+          'endereco_numero': enderecoNumero,
+          'endereco_complemento': enderecoComplemento,
+          'responsavel_nome': responsavelNome,
+          'responsavel_cpf': responsavelCpf,
+          'responsavel_telefone': responsavelTelefone,
         },
       );
 

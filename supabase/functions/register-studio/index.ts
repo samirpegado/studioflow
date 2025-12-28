@@ -9,19 +9,19 @@ const corsHeaders = {
 interface RegisterRequest {
   email: string;
   password: string;
-  nome: string;
+  nome_estudio: string;
+  cnpj?: string;
   telefone: string;
-  cpf_cnpj: string;
   endereco_cep: string;
   endereco_rua: string;
   endereco_cidade: string;
   endereco_uf: string;
   endereco_bairro: string;
-  numero?: string;
-  complemento?: string;
-  tipo: 'musico' | 'banda';
-  latitude?: number;
-  longitude?: number;
+  endereco_numero?: string;
+  endereco_complemento?: string;
+  responsavel_nome?: string;
+  responsavel_cpf?: string;
+  responsavel_telefone?: string;
 }
 
 interface AwesomeApiResponse {
@@ -38,13 +38,33 @@ interface AwesomeApiResponse {
   ddd: string;
 }
 
+interface AsaasCustomerResponse {
+  id: string;
+  dateCreated: string;
+  name: string;
+  email: string;
+  [key: string]: any;
+}
+
+interface AsaasSubscriptionResponse {
+  id: string;
+  customer: string;
+  billingType: string;
+  value: number;
+  nextDueDate: string;
+  cycle: string;
+  status: string;
+  subscriptionUrl?: string;
+  [key: string]: any;
+}
+
 interface RegisterResponse {
   success: boolean;
   message: string;
   notification: string;
   data?: {
     userId?: string;
-    clientId?: string;
+    studioId?: string;
   };
 }
 
@@ -71,7 +91,7 @@ serve(async (req) => {
     const body: RegisterRequest = await req.json();
 
     // Validate required fields
-    if (!body.email || !body.password || !body.nome || !body.cpf_cnpj) {
+    if (!body.email || !body.password || !body.nome_estudio || !body.telefone || !body.responsavel_nome) {
       const response: RegisterResponse = {
         success: false,
         message: 'Campos obrigatórios não fornecidos',
@@ -119,40 +139,7 @@ serve(async (req) => {
       });
     }
 
-    // Check if CPF/CNPJ already exists in public.clients
-    const { data: existingClient, error: clientCheckError } = await supabaseClient
-      .from('clients')
-      .select('id, cpf_cnpj')
-      .eq('cpf_cnpj', body.cpf_cnpj)
-      .is('deleted_at', null)
-      .maybeSingle();
-
-    if (clientCheckError) {
-      console.error('Error checking client:', clientCheckError);
-      const response: RegisterResponse = {
-        success: false,
-        message: 'Erro ao verificar CPF/CNPJ existente',
-        notification: 'Erro ao processar cadastro. Tente novamente.',
-      };
-      return new Response(JSON.stringify(response), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
-    }
-
-    if (existingClient) {
-      const response: RegisterResponse = {
-        success: false,
-        message: 'CPF/CNPJ já cadastrado',
-        notification: 'Este CPF/CNPJ já está cadastrado no sistema.',
-      };
-      return new Response(JSON.stringify(response), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 409,
-      });
-    }
-
-    // Create user in auth.users
+       // Create user in auth.users
     const { data: authUser, error: authError } = await supabaseClient.auth.admin.createUser({
       email: email,
       password: body.password,
@@ -175,8 +162,8 @@ serve(async (req) => {
     const userId = authUser.user.id;
 
     // Buscar dados do CEP na AwesomeAPI
-    let latitude = body.latitude ?? 0.0;
-    let longitude = body.longitude ?? 0.0;
+    let latitude = 0.0;
+    let longitude = 0.0;
     let enderecoRua = body.endereco_rua.trim();
     let enderecoCidade = body.endereco_cidade.trim();
     let enderecoUf = body.endereco_uf.trim().toUpperCase();
@@ -223,7 +210,7 @@ serve(async (req) => {
       .insert({
         id: userId,
         email: email,
-        role: 'client',
+        role: 'studio',
       });
 
     if (publicUserError) {
@@ -242,46 +229,125 @@ serve(async (req) => {
       });
     }
 
-    // Create client in public.clients
-    const clientInsertData: any = {
+    // Integração com Asaas - Criar customer e assinatura
+    const asaasUrl = Deno.env.get('ASAAS_URL');
+    const asaasApiKey = Deno.env.get('ASAAS_API_KEY');
+    let customerId: string | null = null;
+    let subscriptionLink: string | null = null;
+    let subscriptionId: string | null = null;
+
+    if (asaasUrl && asaasApiKey) {
+      try {
+        // Criar customer no Asaas
+        const customerData = {
+          name: body.nome_estudio.trim(),
+          email: email,
+          phone: body.telefone.replace(/\D/g, ''), // Remove formatação
+          cpfCnpj: body.cnpj ? body.cnpj.replace(/\D/g, '') : (body.responsavel_cpf ? body.responsavel_cpf.replace(/\D/g, '') : null),
+          postalCode: cepLimpo,
+          address: enderecoRua,
+          addressNumber: body.endereco_numero ? body.endereco_numero.trim() : null,
+          complement: body.endereco_complemento ? body.endereco_complemento.trim() : null,
+          province: enderecoBairro,
+          city: enderecoCidade,
+          state: enderecoUf,
+        };
+
+        const customerResponse = await fetch(`${asaasUrl}/customers`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'access_token': asaasApiKey,
+          },
+          body: JSON.stringify(customerData),
+        });
+
+        if (customerResponse.ok) {
+          const customerResult: AsaasCustomerResponse = await customerResponse.json();
+          customerId = customerResult.id;
+        } else {
+          console.error('Error creating Asaas customer:', await customerResponse.text());
+        }
+
+        // Criar assinatura recorrente no Asaas
+        if (customerId) {
+          const subscriptionData = {
+            customer: customerId,
+            billingType: 'PIX', // Pode ser alterado para 'CREDIT_CARD', 'BOLETO', etc.
+            value: 59.9,
+            nextDueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 dias a partir de hoje
+            cycle: 'MONTHLY',
+            description: `Assinatura mensal - ${body.nome_estudio.trim()}`,
+          };
+
+          const subscriptionResponse = await fetch(`${asaasUrl}/subscriptions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'access_token': asaasApiKey,
+            },
+            body: JSON.stringify(subscriptionData),
+          });
+
+          if (subscriptionResponse.ok) {
+            const subscriptionResult: AsaasSubscriptionResponse = await subscriptionResponse.json();
+            subscriptionId = subscriptionResult.id;
+            subscriptionLink = subscriptionResult.subscriptionUrl || null;
+          } else {
+            console.error('Error creating Asaas subscription:', await subscriptionResponse.text());
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao integrar com Asaas:', error);
+        // Continua mesmo se o Asaas falhar
+      }
+    }
+
+    // Calcular data de assinatura (7 dias após criação)
+    const dataAssinatura = new Date();
+    dataAssinatura.setDate(dataAssinatura.getDate() + 7);
+    const dataAssinaturaStr = dataAssinatura.toISOString().split('T')[0];
+
+    // Create studio in public.studios
+    const studioInsertData: any = {
       user_id: userId,
-      nome: body.nome.trim(),
+      nome_estudio: body.nome_estudio.trim(),
       email: email,
       telefone: body.telefone.trim(),
-      cpf_cnpj: body.cpf_cnpj.trim(),
+      cnpj: body.cnpj ? body.cnpj.trim() : null,
       endereco_cep: body.endereco_cep.trim(),
       endereco_rua: enderecoRua,
       endereco_cidade: enderecoCidade,
       endereco_uf: enderecoUf,
       endereco_bairro: enderecoBairro,
-      tipo: body.tipo,
+      endereco_numero: body.endereco_numero ? body.endereco_numero.trim() : null,
+      endereco_complemento: body.endereco_complemento ? body.endereco_complemento.trim() : null,
+      responsavel_nome: body.responsavel_nome ? body.responsavel_nome.trim() : null,
+      responsavel_cpf: body.responsavel_cpf ? body.responsavel_cpf.trim() : null,
+      responsavel_telefone: body.responsavel_telefone ? body.responsavel_telefone.trim() : null,
       latitude: latitude,
       longitude: longitude,
+      customer_id: customerId,
+      data_assinatura: dataAssinaturaStr,
+      status_assinatura: 'trial',
+      link_assinatura: subscriptionLink,
     };
 
-    // Adiciona numero e complemento se fornecidos
-    if (body.numero) {
-      clientInsertData.endereco_numero = body.numero.trim();
-    }
-    if (body.complemento) {
-      clientInsertData.endereco_complemento = body.complemento.trim();
-    }
-
-    const { data: clientData, error: clientError } = await supabaseClient
-      .from('clients')
-      .insert(clientInsertData)
+    const { data: studioData, error: studioError } = await supabaseClient
+      .from('studios')
+      .insert(studioInsertData)
       .select('id')
       .single();
 
-    if (clientError) {
-      console.error('Error creating client:', clientError);
-      // Try to clean up if client creation fails
+    if (studioError) {
+      console.error('Error creating studio:', studioError);
+      // Try to clean up if studio creation fails
       await supabaseClient.from('users').delete().eq('id', userId);
       await supabaseClient.auth.admin.deleteUser(userId);
       
       const response: RegisterResponse = {
         success: false,
-        message: 'Erro ao criar registro do cliente',
+        message: 'Erro ao criar registro do estúdio',
         notification: 'Erro ao processar cadastro. Tente novamente.',
       };
       return new Response(JSON.stringify(response), {
@@ -293,11 +359,11 @@ serve(async (req) => {
     // Success response
     const response: RegisterResponse = {
       success: true,
-      message: 'Usuário cadastrado com sucesso',
+      message: 'Estúdio cadastrado com sucesso',
       notification: 'Cadastro realizado com sucesso! Você já pode fazer login.',
       data: {
         userId: userId,
-        clientId: clientData.id,
+        studioId: studioData.id,
       },
     };
 

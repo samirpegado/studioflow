@@ -29,6 +29,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final _bairroController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _numeroController = TextEditingController();
+  final _complementoController = TextEditingController();
 
   final _telefoneFormatter = MaskTextInputFormatter(mask: '(##) #####-####');
   final _cepFormatter = MaskTextInputFormatter(mask: '#####-###');
@@ -37,6 +39,14 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoadingCep = false;
+  bool _isRegistering = false;
+  String? _selectedUf;
+
+  static const List<String> _estadosBrasileiros = [
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+    'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+    'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+  ];
 
   @override
   void initState() {
@@ -57,6 +67,8 @@ class _RegisterPageState extends State<RegisterPage> {
     _cidadeController.dispose();
     _ufController.dispose();
     _bairroController.dispose();
+    _numeroController.dispose();
+    _complementoController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -84,7 +96,9 @@ class _RegisterPageState extends State<RegisterPage> {
         _ruaController.text = endereco['logradouro'] ?? '';
         _bairroController.text = endereco['bairro'] ?? '';
         _cidadeController.text = endereco['localidade'] ?? '';
-        _ufController.text = endereco['uf'] ?? '';
+        final uf = endereco['uf'] ?? '';
+        _ufController.text = uf;
+        _selectedUf = uf;
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -125,6 +139,10 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
+    setState(() {
+      _isRegistering = true;
+    });
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final authService = AuthService();
 
@@ -142,6 +160,8 @@ class _RegisterPageState extends State<RegisterPage> {
         nome: _nomeController.text.trim(),
         telefone: _telefoneFormatter.getUnmaskedText(),
         cpfCnpj: cpfCnpjLimpo,
+        numero: _numeroController.text.trim(),
+        complemento: _complementoController.text.trim(),
         enderecoCep: _cepFormatter.getUnmaskedText(),
         enderecoRua: _ruaController.text.trim(),
         enderecoCidade: _cidadeController.text.trim(),
@@ -152,7 +172,12 @@ class _RegisterPageState extends State<RegisterPage> {
         longitude: 0.0,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        setState(() {
+          _isRegistering = false;
+        });
+        return;
+      }
 
       if (response.success) {
         // Fazer login após registro bem-sucedido
@@ -163,7 +188,12 @@ class _RegisterPageState extends State<RegisterPage> {
 
         if (loginSuccess) {
           await authProvider.loadUser(authProvider.user!.id);
-          if (!mounted) return;
+          if (!mounted) {
+            setState(() {
+              _isRegistering = false;
+            });
+            return;
+          }
           
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -172,8 +202,19 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           );
           
+          setState(() {
+            _isRegistering = false;
+          });
+          
           context.go('/client');
+          return;
         } else {
+          if (!mounted) {
+            setState(() {
+              _isRegistering = false;
+            });
+            return;
+          }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Conta criada, mas erro ao fazer login. Tente fazer login manualmente.'),
@@ -182,6 +223,12 @@ class _RegisterPageState extends State<RegisterPage> {
           );
         }
       } else {
+        if (!mounted) {
+          setState(() {
+            _isRegistering = false;
+          });
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(response.notification),
@@ -197,6 +244,12 @@ class _RegisterPageState extends State<RegisterPage> {
           backgroundColor: Colors.red,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRegistering = false;
+        });
+      }
     }
   }
 
@@ -207,16 +260,19 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Cadastro')),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(Responsive.getPadding(context)),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: isMobile ? double.infinity : 600,
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Container(
+          width: double.infinity,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(Responsive.getPadding(context)),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isMobile ? double.infinity : 600,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Criar Conta',
@@ -377,7 +433,6 @@ class _RegisterPageState extends State<RegisterPage> {
                     controller: _ruaController,
                     decoration: const InputDecoration(
                       labelText: 'Rua',
-                      prefixIcon: Icon(Icons.streetview),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -387,11 +442,42 @@ class _RegisterPageState extends State<RegisterPage> {
                     },
                   ),
                   const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _numeroController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Número',
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Número obrigatório';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 3,
+                        child: TextFormField(
+                          controller: _complementoController,
+                          decoration: const InputDecoration(
+                            labelText: 'Complemento',
+                            hintText: 'Opcional',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _bairroController,
                     decoration: const InputDecoration(
                       labelText: 'Bairro',
-                      prefixIcon: Icon(Icons.location_city),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -408,7 +494,6 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _cidadeController,
                           decoration: const InputDecoration(
                             labelText: 'Cidade',
-                            prefixIcon: Icon(Icons.location_city),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -421,21 +506,26 @@ class _RegisterPageState extends State<RegisterPage> {
                       const SizedBox(width: 16),
                       Expanded(
                         flex: 1,
-                        child: TextFormField(
-                          controller: _ufController,
-                          maxLength: 2,
-                          textCapitalization: TextCapitalization.characters,
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedUf,
                           decoration: const InputDecoration(
                             labelText: 'UF',
-                            prefixIcon: Icon(Icons.map),
-                            counterText: '',
                           ),
+                          items: _estadosBrasileiros.map((uf) {
+                            return DropdownMenuItem<String>(
+                              value: uf,
+                              child: Text(uf),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedUf = value;
+                              _ufController.text = value ?? '';
+                            });
+                          },
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'UF obrigatória';
-                            }
-                            if (value.length != 2) {
-                              return 'UF inválida';
                             }
                             return null;
                           },
@@ -506,31 +596,48 @@ class _RegisterPageState extends State<RegisterPage> {
                     },
                   ),
                   const SizedBox(height: 32),
-                  Consumer<AuthProvider>(
-                    builder: (context, authProvider, _) {
-                      return ElevatedButton(
-                        onPressed: authProvider.isLoading
-                            ? null
-                            : _handleRegister,
-                        child: authProvider.isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Cadastrar'),
-                      );
-                    },
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isRegistering ? null : _handleRegister,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 2,
+                      ),
+                      child: _isRegistering
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text(
+                              'Cadastrar',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () => context.go('/login'),
-                    child: const Text('Já tem conta? Faça login'),
+                  Center(
+                    child: TextButton(
+                      onPressed: () => context.go('/login'),
+                      child: const Text('Já tem conta? Faça login'),
+                    ),
                   ),
                 ],
               ),
+            ),
+          ),
             ),
           ),
         ),
@@ -572,28 +679,36 @@ class _CpfCnpjAutoFormatter extends TextInputFormatter {
   }
 
   String _formatCpf(String digits) {
-    if (digits.length <= 3) {
-      return digits;
-    } else if (digits.length <= 6) {
-      return '${digits.substring(0, 3)}.${digits.substring(3)}';
-    } else if (digits.length <= 9) {
-      return '${digits.substring(0, 3)}.${digits.substring(3, 6)}.${digits.substring(6)}';
+    // Limita a 11 dígitos para CPF
+    final limitedDigits = digits.length > 11 ? digits.substring(0, 11) : digits;
+    
+    if (limitedDigits.length <= 3) {
+      return limitedDigits;
+    } else if (limitedDigits.length <= 6) {
+      return '${limitedDigits.substring(0, 3)}.${limitedDigits.substring(3)}';
+    } else if (limitedDigits.length <= 9) {
+      return '${limitedDigits.substring(0, 3)}.${limitedDigits.substring(3, 6)}.${limitedDigits.substring(6)}';
     } else {
-      return '${digits.substring(0, 3)}.${digits.substring(3, 6)}.${digits.substring(6, 9)}-${digits.substring(9, 11)}';
+      // Para CPF completo (11 dígitos)
+      return '${limitedDigits.substring(0, 3)}.${limitedDigits.substring(3, 6)}.${limitedDigits.substring(6, 9)}-${limitedDigits.substring(9)}';
     }
   }
 
   String _formatCnpj(String digits) {
-    if (digits.length <= 2) {
-      return digits;
-    } else if (digits.length <= 5) {
-      return '${digits.substring(0, 2)}.${digits.substring(2)}';
-    } else if (digits.length <= 8) {
-      return '${digits.substring(0, 2)}.${digits.substring(2, 5)}.${digits.substring(5)}';
-    } else if (digits.length <= 12) {
-      return '${digits.substring(0, 2)}.${digits.substring(2, 5)}.${digits.substring(5, 8)}/${digits.substring(8)}';
+    // Limita a 14 dígitos para CNPJ
+    final limitedDigits = digits.length > 14 ? digits.substring(0, 14) : digits;
+    
+    if (limitedDigits.length <= 2) {
+      return limitedDigits;
+    } else if (limitedDigits.length <= 5) {
+      return '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2)}';
+    } else if (limitedDigits.length <= 8) {
+      return '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2, 5)}.${limitedDigits.substring(5)}';
+    } else if (limitedDigits.length <= 12) {
+      return '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2, 5)}.${limitedDigits.substring(5, 8)}/${limitedDigits.substring(8)}';
     } else {
-      return '${digits.substring(0, 2)}.${digits.substring(2, 5)}.${digits.substring(5, 8)}/${digits.substring(8, 12)}-${digits.substring(12, 14)}';
+      // Para CNPJ completo (14 dígitos)
+      return '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2, 5)}.${limitedDigits.substring(5, 8)}/${limitedDigits.substring(8, 12)}-${limitedDigits.substring(12)}';
     }
   }
 }
