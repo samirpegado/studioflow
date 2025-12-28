@@ -9,19 +9,18 @@ const corsHeaders = {
 interface RegisterRequest {
   email: string;
   password: string;
-  nome_estudio: string;
-  cnpj?: string;
+  nome: string;
   telefone: string;
-  endereco_cep: string;
-  endereco_rua: string;
-  endereco_cidade: string;
-  endereco_uf: string;
-  endereco_bairro: string;
+  cpf_cnpj?: string;
+  nome_legal?: string;
+  endereco_cep?: string;
+  endereco_rua?: string;
+  endereco_cidade?: string;
+  endereco_uf?: string;
+  endereco_bairro?: string;
   endereco_numero?: string;
   endereco_complemento?: string;
-  responsavel_nome?: string;
-  responsavel_cpf?: string;
-  responsavel_telefone?: string;
+  img_url?: string;
 }
 
 interface AwesomeApiResponse {
@@ -36,26 +35,6 @@ interface AwesomeApiResponse {
   city: string;
   city_ibge: string;
   ddd: string;
-}
-
-interface AsaasCustomerResponse {
-  id: string;
-  dateCreated: string;
-  name: string;
-  email: string;
-  [key: string]: any;
-}
-
-interface AsaasSubscriptionResponse {
-  id: string;
-  customer: string;
-  billingType: string;
-  value: number;
-  nextDueDate: string;
-  cycle: string;
-  status: string;
-  subscriptionUrl?: string;
-  [key: string]: any;
 }
 
 interface RegisterResponse {
@@ -91,7 +70,9 @@ serve(async (req) => {
     const body: RegisterRequest = await req.json();
 
     // Validate required fields
-    if (!body.email || !body.password || !body.nome_estudio || !body.telefone || !body.responsavel_nome) {
+    if (!body.email || !body.password || !body.nome || !body.telefone || !body.cpf_cnpj || !body.nome_legal || 
+        !body.endereco_cep || !body.endereco_rua || !body.endereco_cidade || !body.endereco_uf || 
+        !body.endereco_bairro || !body.endereco_numero) {
       const response: RegisterResponse = {
         success: false,
         message: 'Campos obrigatórios não fornecidos',
@@ -161,176 +142,66 @@ serve(async (req) => {
 
     const userId = authUser.user.id;
 
-    // Buscar dados do CEP na AwesomeAPI
-    let latitude = 0.0;
-    let longitude = 0.0;
-    let enderecoRua = body.endereco_rua.trim();
-    let enderecoCidade = body.endereco_cidade.trim();
-    let enderecoUf = body.endereco_uf.trim().toUpperCase();
-    let enderecoBairro = body.endereco_bairro.trim();
+    // Buscar dados do CEP na AwesomeAPI (se endereco_cep fornecido)
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    let enderecoRua = body.endereco_rua || null;
+    let enderecoCidade = body.endereco_cidade || null;
+    let enderecoUf = body.endereco_uf ? body.endereco_uf.trim().toUpperCase() : null;
+    let enderecoBairro = body.endereco_bairro || null;
+    const cepLimpo = body.endereco_cep ? body.endereco_cep.replace(/\D/g, '') : null;
 
-    const awesomeApiToken = Deno.env.get('AWESOME_API');
-    const cepLimpo = body.endereco_cep.replace(/\D/g, ''); // Remove formatação
+    if (body.endereco_cep && cepLimpo && cepLimpo.length === 8) {
+      const awesomeApiToken = Deno.env.get('AWESOME_API');
+      if (awesomeApiToken) {
+        try {
+          const awesomeApiUrl = `https://cep.awesomeapi.com.br/json/${cepLimpo}?token=${awesomeApiToken}`;
+          const cepResponse = await fetch(awesomeApiUrl);
 
-    if (awesomeApiToken && cepLimpo.length === 8) {
-      try {
-        const awesomeApiUrl = `https://cep.awesomeapi.com.br/json/${cepLimpo}?token=${awesomeApiToken}`;
-        const cepResponse = await fetch(awesomeApiUrl);
-
-        if (cepResponse.ok) {
-          const cepData: AwesomeApiResponse = await cepResponse.json();
-          
-          // Usa os dados da API se disponíveis, senão mantém os enviados
-          if (cepData.address) {
-            enderecoRua = cepData.address.trim();
+          if (cepResponse.ok) {
+            const cepData: AwesomeApiResponse = await cepResponse.json();
+            
+            // Usa os dados da API se disponíveis
+            if (cepData.address) {
+              enderecoRua = cepData.address.trim();
+            }
+            if (cepData.city) {
+              enderecoCidade = cepData.city.trim();
+            }
+            if (cepData.state) {
+              enderecoUf = cepData.state.trim().toUpperCase();
+            }
+            if (cepData.district) {
+              enderecoBairro = cepData.district.trim();
+            }
+            if (cepData.lat && cepData.lng) {
+              latitude = parseFloat(cepData.lat);
+              longitude = parseFloat(cepData.lng);
+            }
           }
-          if (cepData.city) {
-            enderecoCidade = cepData.city.trim();
-          }
-          if (cepData.state) {
-            enderecoUf = cepData.state.trim().toUpperCase();
-          }
-          if (cepData.district) {
-            enderecoBairro = cepData.district.trim();
-          }
-          if (cepData.lat && cepData.lng) {
-            latitude = parseFloat(cepData.lat);
-            longitude = parseFloat(cepData.lng);
-          }
+        } catch (error) {
+          console.error('Erro ao buscar CEP na AwesomeAPI:', error);
         }
-      } catch (error) {
-        console.error('Erro ao buscar CEP na AwesomeAPI:', error);
-        // Continua com os dados enviados se a API falhar
       }
     }
 
-    // Create user in public.users
-    const { error: publicUserError } = await supabaseClient
-      .from('users')
-      .insert({
-        id: userId,
-        email: email,
-        role: 'studio',
-      });
-
-    if (publicUserError) {
-      console.error('Error creating public user:', publicUserError);
-      // Try to clean up auth user if public user creation fails
-      await supabaseClient.auth.admin.deleteUser(userId);
-      
-      const response: RegisterResponse = {
-        success: false,
-        message: 'Erro ao criar registro do usuário',
-        notification: 'Erro ao processar cadastro. Tente novamente.',
-      };
-      return new Response(JSON.stringify(response), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
-    }
-
-    // Integração com Asaas - Criar customer e assinatura
-    const asaasUrl = Deno.env.get('ASAAS_URL');
-    const asaasApiKey = Deno.env.get('ASAAS_API_KEY');
-    let customerId: string | null = null;
-    let subscriptionLink: string | null = null;
-    let subscriptionId: string | null = null;
-
-    if (asaasUrl && asaasApiKey) {
-      try {
-        // Criar customer no Asaas
-        const customerData = {
-          name: body.nome_estudio.trim(),
-          email: email,
-          phone: body.telefone.replace(/\D/g, ''), // Remove formatação
-          cpfCnpj: body.cnpj ? body.cnpj.replace(/\D/g, '') : (body.responsavel_cpf ? body.responsavel_cpf.replace(/\D/g, '') : null),
-          postalCode: cepLimpo,
-          address: enderecoRua,
-          addressNumber: body.endereco_numero ? body.endereco_numero.trim() : null,
-          complement: body.endereco_complemento ? body.endereco_complemento.trim() : null,
-          province: enderecoBairro,
-          city: enderecoCidade,
-          state: enderecoUf,
-        };
-
-        const customerResponse = await fetch(`${asaasUrl}/customers`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'access_token': asaasApiKey,
-          },
-          body: JSON.stringify(customerData),
-        });
-
-        if (customerResponse.ok) {
-          const customerResult: AsaasCustomerResponse = await customerResponse.json();
-          customerId = customerResult.id;
-        } else {
-          console.error('Error creating Asaas customer:', await customerResponse.text());
-        }
-
-        // Criar assinatura recorrente no Asaas
-        if (customerId) {
-          const subscriptionData = {
-            customer: customerId,
-            billingType: 'PIX', // Pode ser alterado para 'CREDIT_CARD', 'BOLETO', etc.
-            value: 59.9,
-            nextDueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 dias a partir de hoje
-            cycle: 'MONTHLY',
-            description: `Assinatura mensal - ${body.nome_estudio.trim()}`,
-          };
-
-          const subscriptionResponse = await fetch(`${asaasUrl}/subscriptions`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'access_token': asaasApiKey,
-            },
-            body: JSON.stringify(subscriptionData),
-          });
-
-          if (subscriptionResponse.ok) {
-            const subscriptionResult: AsaasSubscriptionResponse = await subscriptionResponse.json();
-            subscriptionId = subscriptionResult.id;
-            subscriptionLink = subscriptionResult.subscriptionUrl || null;
-          } else {
-            console.error('Error creating Asaas subscription:', await subscriptionResponse.text());
-          }
-        }
-      } catch (error) {
-        console.error('Erro ao integrar com Asaas:', error);
-        // Continua mesmo se o Asaas falhar
-      }
-    }
-
-    // Calcular data de assinatura (7 dias após criação)
+    // Calculate data_assinatura (7 days from today)
     const dataAssinatura = new Date();
     dataAssinatura.setDate(dataAssinatura.getDate() + 7);
     const dataAssinaturaStr = dataAssinatura.toISOString().split('T')[0];
 
     // Create studio in public.studios
     const studioInsertData: any = {
-      user_id: userId,
-      nome_estudio: body.nome_estudio.trim(),
+      id: userId,
+      nome: body.nome.trim(),
       email: email,
       telefone: body.telefone.trim(),
-      cnpj: body.cnpj ? body.cnpj.trim() : null,
-      endereco_cep: body.endereco_cep.trim(),
-      endereco_rua: enderecoRua,
-      endereco_cidade: enderecoCidade,
-      endereco_uf: enderecoUf,
-      endereco_bairro: enderecoBairro,
-      endereco_numero: body.endereco_numero ? body.endereco_numero.trim() : null,
-      endereco_complemento: body.endereco_complemento ? body.endereco_complemento.trim() : null,
-      responsavel_nome: body.responsavel_nome ? body.responsavel_nome.trim() : null,
-      responsavel_cpf: body.responsavel_cpf ? body.responsavel_cpf.trim() : null,
-      responsavel_telefone: body.responsavel_telefone ? body.responsavel_telefone.trim() : null,
-      latitude: latitude,
-      longitude: longitude,
-      customer_id: customerId,
+      img_url: body.img_url ? body.img_url.trim() : null,
+      customer_id: null,
       data_assinatura: dataAssinaturaStr,
       status_assinatura: 'trial',
-      link_assinatura: subscriptionLink,
+      cpf_cnpj: body.cpf_cnpj.trim(),
+      nome_legal: body.nome_legal.trim(),
     };
 
     const { data: studioData, error: studioError } = await supabaseClient
@@ -342,12 +213,45 @@ serve(async (req) => {
     if (studioError) {
       console.error('Error creating studio:', studioError);
       // Try to clean up if studio creation fails
-      await supabaseClient.from('users').delete().eq('id', userId);
       await supabaseClient.auth.admin.deleteUser(userId);
       
       const response: RegisterResponse = {
         success: false,
         message: 'Erro ao criar registro do estúdio',
+        notification: 'Erro ao processar cadastro. Tente novamente.',
+      };
+      return new Response(JSON.stringify(response), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      });
+    }
+
+    // Create endereco in public.enderecos
+    const enderecoInsertData: any = {
+      id: userId,
+      cep: body.endereco_cep.replace(/\D/g, ''),
+      endereco: enderecoRua,
+      numero: body.endereco_numero.trim(),
+      cidade: enderecoCidade,
+      estado: enderecoUf,
+      complemento: body.endereco_complemento ? body.endereco_complemento.trim() : null,
+      lat: latitude,
+      long: longitude,
+    };
+
+    const { error: enderecoError } = await supabaseClient
+      .from('enderecos')
+      .insert(enderecoInsertData);
+
+    if (enderecoError) {
+      console.error('Error creating endereco:', enderecoError);
+      // Try to clean up if endereco creation fails
+      await supabaseClient.from('studios').delete().eq('id', userId);
+      await supabaseClient.auth.admin.deleteUser(userId);
+      
+      const response: RegisterResponse = {
+        success: false,
+        message: 'Erro ao criar endereço',
         notification: 'Erro ao processar cadastro. Tente novamente.',
       };
       return new Response(JSON.stringify(response), {

@@ -11,31 +11,7 @@ interface RegisterRequest {
   password: string;
   nome: string;
   telefone: string;
-  cpf_cnpj: string;
-  endereco_cep: string;
-  endereco_rua: string;
-  endereco_cidade: string;
-  endereco_uf: string;
-  endereco_bairro: string;
-  numero?: string;
-  complemento?: string;
-  tipo: 'musico' | 'banda';
-  latitude?: number;
-  longitude?: number;
-}
-
-interface AwesomeApiResponse {
-  cep: string;
-  address_type: string;
-  address_name: string;
-  address: string;
-  state: string;
-  district: string;
-  lat: string;
-  lng: string;
-  city: string;
-  city_ibge: string;
-  ddd: string;
+  tipo?: 'musico' | 'banda';
 }
 
 interface RegisterResponse {
@@ -44,7 +20,6 @@ interface RegisterResponse {
   notification: string;
   data?: {
     userId?: string;
-    clientId?: string;
   };
 }
 
@@ -71,11 +46,11 @@ serve(async (req) => {
     const body: RegisterRequest = await req.json();
 
     // Validate required fields
-    if (!body.email || !body.password || !body.nome || !body.cpf_cnpj) {
+    if (!body.email || !body.password || !body.nome || !body.telefone) {
       const response: RegisterResponse = {
         success: false,
         message: 'Campos obrigatórios não fornecidos',
-        notification: 'Por favor, preencha todos os campos obrigatórios',
+        notification: 'Por favor, preencha todos os campos obrigatórios (nome, email, telefone e senha)',
       };
       return new Response(JSON.stringify(response), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -119,39 +94,6 @@ serve(async (req) => {
       });
     }
 
-    // Check if CPF/CNPJ already exists in public.clients
-    const { data: existingClient, error: clientCheckError } = await supabaseClient
-      .from('clients')
-      .select('id, cpf_cnpj')
-      .eq('cpf_cnpj', body.cpf_cnpj)
-      .is('deleted_at', null)
-      .maybeSingle();
-
-    if (clientCheckError) {
-      console.error('Error checking client:', clientCheckError);
-      const response: RegisterResponse = {
-        success: false,
-        message: 'Erro ao verificar CPF/CNPJ existente',
-        notification: 'Erro ao processar cadastro. Tente novamente.',
-      };
-      return new Response(JSON.stringify(response), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
-    }
-
-    if (existingClient) {
-      const response: RegisterResponse = {
-        success: false,
-        message: 'CPF/CNPJ já cadastrado',
-        notification: 'Este CPF/CNPJ já está cadastrado no sistema.',
-      };
-      return new Response(JSON.stringify(response), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 409,
-      });
-    }
-
     // Create user in auth.users
     const { data: authUser, error: authError } = await supabaseClient.auth.admin.createUser({
       email: email,
@@ -174,56 +116,15 @@ serve(async (req) => {
 
     const userId = authUser.user.id;
 
-    // Buscar dados do CEP na AwesomeAPI
-    let latitude = body.latitude ?? 0.0;
-    let longitude = body.longitude ?? 0.0;
-    let enderecoRua = body.endereco_rua.trim();
-    let enderecoCidade = body.endereco_cidade.trim();
-    let enderecoUf = body.endereco_uf.trim().toUpperCase();
-    let enderecoBairro = body.endereco_bairro.trim();
-
-    const awesomeApiToken = Deno.env.get('AWESOME_API');
-    const cepLimpo = body.endereco_cep.replace(/\D/g, ''); // Remove formatação
-
-    if (awesomeApiToken && cepLimpo.length === 8) {
-      try {
-        const awesomeApiUrl = `https://cep.awesomeapi.com.br/json/${cepLimpo}?token=${awesomeApiToken}`;
-        const cepResponse = await fetch(awesomeApiUrl);
-
-        if (cepResponse.ok) {
-          const cepData: AwesomeApiResponse = await cepResponse.json();
-          
-          // Usa os dados da API se disponíveis, senão mantém os enviados
-          if (cepData.address) {
-            enderecoRua = cepData.address.trim();
-          }
-          if (cepData.city) {
-            enderecoCidade = cepData.city.trim();
-          }
-          if (cepData.state) {
-            enderecoUf = cepData.state.trim().toUpperCase();
-          }
-          if (cepData.district) {
-            enderecoBairro = cepData.district.trim();
-          }
-          if (cepData.lat && cepData.lng) {
-            latitude = parseFloat(cepData.lat);
-            longitude = parseFloat(cepData.lng);
-          }
-        }
-      } catch (error) {
-        console.error('Erro ao buscar CEP na AwesomeAPI:', error);
-        // Continua com os dados enviados se a API falhar
-      }
-    }
-
     // Create user in public.users
     const { error: publicUserError } = await supabaseClient
       .from('users')
       .insert({
         id: userId,
         email: email,
-        role: 'client',
+        nome: body.nome.trim(),
+        telefone: body.telefone.trim(),
+        tipo: body.tipo || null,
       });
 
     if (publicUserError) {
@@ -242,54 +143,6 @@ serve(async (req) => {
       });
     }
 
-    // Create client in public.clients
-    const clientInsertData: any = {
-      user_id: userId,
-      nome: body.nome.trim(),
-      email: email,
-      telefone: body.telefone.trim(),
-      cpf_cnpj: body.cpf_cnpj.trim(),
-      endereco_cep: body.endereco_cep.trim(),
-      endereco_rua: enderecoRua,
-      endereco_cidade: enderecoCidade,
-      endereco_uf: enderecoUf,
-      endereco_bairro: enderecoBairro,
-      tipo: body.tipo,
-      latitude: latitude,
-      longitude: longitude,
-    };
-
-    // Adiciona numero e complemento se fornecidos
-    if (body.numero) {
-      clientInsertData.endereco_numero = body.numero.trim();
-    }
-    if (body.complemento) {
-      clientInsertData.endereco_complemento = body.complemento.trim();
-    }
-
-    const { data: clientData, error: clientError } = await supabaseClient
-      .from('clients')
-      .insert(clientInsertData)
-      .select('id')
-      .single();
-
-    if (clientError) {
-      console.error('Error creating client:', clientError);
-      // Try to clean up if client creation fails
-      await supabaseClient.from('users').delete().eq('id', userId);
-      await supabaseClient.auth.admin.deleteUser(userId);
-      
-      const response: RegisterResponse = {
-        success: false,
-        message: 'Erro ao criar registro do cliente',
-        notification: 'Erro ao processar cadastro. Tente novamente.',
-      };
-      return new Response(JSON.stringify(response), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
-    }
-
     // Success response
     const response: RegisterResponse = {
       success: true,
@@ -297,7 +150,6 @@ serve(async (req) => {
       notification: 'Cadastro realizado com sucesso! Você já pode fazer login.',
       data: {
         userId: userId,
-        clientId: clientData.id,
       },
     };
 
@@ -318,4 +170,3 @@ serve(async (req) => {
     });
   }
 });
-

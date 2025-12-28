@@ -125,7 +125,7 @@ class StudioProvider with ChangeNotifier {
         data['completed_at'] = DateTime.now().toIso8601String();
       } else if (status == BookingStatus.cancelled) {
         data['cancelled_at'] = DateTime.now().toIso8601String();
-        data['cancelled_by'] = _studio!.userId;
+        data['cancelled_by'] = _studio!.id;
       }
 
       await _supabaseService.updateBooking(bookingId, data);

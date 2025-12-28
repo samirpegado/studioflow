@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../models/user_model.dart';
@@ -48,6 +47,17 @@ class SupabaseService {
 
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
 
+  // Initial Data RPC
+  Future<Map<String, dynamic>?> getInitialData() async {
+    try {
+      final response = await _client.rpc('get_initial_data');
+      return response as Map<String, dynamic>?;
+    } catch (e) {
+      print('Error calling get_initial_data: $e');
+      return null;
+    }
+  }
+
   // Users
   Future<UserModel?> getUser(String userId) async {
     final response = await _client
@@ -67,57 +77,16 @@ class SupabaseService {
     double? longitude,
     double? raioKm,
   }) async {
-    var query = _client.from('studios').select().eq('ativo', true);
+    var query = _client.from('studios').select();
     
-    if (cidade != null && cidade.isNotEmpty) {
-      query = query.ilike('endereco_cidade', '%$cidade%');
-    }
+    // TODO: Implementar busca por cidade e proximidade usando a tabela enderecos
+    // Por enquanto, retorna todos os estúdios
     
     final response = await query;
     
     List<StudioModel> studios = (response as List)
         .map((json) => StudioModel.fromJson(json as Map<String, dynamic>))
         .toList();
-    
-    // Filtrar por proximidade se fornecido
-    // Só filtra se o estúdio tiver coordenadas válidas (não 0.0)
-    if (latitude != null && longitude != null && raioKm != null) {
-      studios = studios.where((studio) {
-        // Se o estúdio não tem coordenadas configuradas, inclui na lista
-        if (studio.latitude == 0.0 && studio.longitude == 0.0) {
-          return true;
-        }
-        
-        final distancia = _calculateDistance(
-          latitude,
-          longitude,
-          studio.latitude,
-          studio.longitude,
-        );
-        return distancia <= raioKm;
-      }).toList();
-      
-      // Ordenar por proximidade (estúdios sem coordenadas vão para o final)
-      studios.sort((a, b) {
-        // Estúdios sem coordenadas vão para o final
-        if (a.latitude == 0.0 && a.longitude == 0.0) return 1;
-        if (b.latitude == 0.0 && b.longitude == 0.0) return -1;
-        
-        final distA = _calculateDistance(
-          latitude,
-          longitude,
-          a.latitude,
-          a.longitude,
-        );
-        final distB = _calculateDistance(
-          latitude,
-          longitude,
-          b.latitude,
-          b.longitude,
-        );
-        return distA.compareTo(distB);
-      });
-    }
     
     return studios;
   }
@@ -137,7 +106,7 @@ class SupabaseService {
     final response = await _client
         .from('studios')
         .select()
-        .eq('user_id', userId)
+        .eq('id', userId)
         .maybeSingle();
     
     if (response == null) return null;
@@ -314,31 +283,5 @@ class SupabaseService {
     return ReviewModel.fromJson(response);
   }
 
-  // Helper: Calcular distância usando fórmula de Haversine
-  double _calculateDistance(
-    double lat1,
-    double lon1,
-    double lat2,
-    double lon2,
-  ) {
-    const double earthRadius = 6371; // km
-    
-    final dLat = _toRadians(lat2 - lat1);
-    final dLon = _toRadians(lon2 - lon1);
-    
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_toRadians(lat1)) *
-            math.cos(_toRadians(lat2)) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    
-    return earthRadius * c;
-  }
-
-  double _toRadians(double degrees) {
-    return degrees * (math.pi / 180);
-  }
 }
 

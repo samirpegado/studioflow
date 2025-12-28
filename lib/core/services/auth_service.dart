@@ -13,17 +13,7 @@ class AuthService {
     required String password,
     required String nome,
     required String telefone,
-    required String cpfCnpj,
-    required String enderecoCep,
-    required String enderecoRua,
-    required String enderecoCidade,
-    required String enderecoUf,
-    required String enderecoBairro,
-    required String tipo,
-    String? numero,
-    String? complemento,
-    double? latitude,
-    double? longitude,
+    String? tipo,
   }) async {
     try {
       final response = await client.functions.invoke(
@@ -33,17 +23,7 @@ class AuthService {
           'password': password,
           'nome': nome,
           'telefone': telefone,
-          'cpf_cnpj': cpfCnpj,
-          'endereco_cep': enderecoCep,
-          'endereco_rua': enderecoRua,
-          'endereco_cidade': enderecoCidade,
-          'endereco_uf': enderecoUf,
-          'endereco_bairro': enderecoBairro,
-          'numero': numero,
-          'complemento': complemento,
-          'tipo': tipo,
-          'latitude': latitude ?? 0.0,
-          'longitude': longitude ?? 0.0,
+          if (tipo != null) 'tipo': tipo,
         },
       );
 
@@ -71,19 +51,17 @@ class AuthService {
   Future<RegisterResponse> registerStudio({
     required String email,
     required String password,
-    required String nomeEstudio,
-    String? cnpj,
+    required String nome,
     required String telefone,
+    required String cpfCnpj,
+    required String nomeLegal,
     required String enderecoCep,
     required String enderecoRua,
     required String enderecoCidade,
     required String enderecoUf,
     required String enderecoBairro,
-    String? enderecoNumero,
+    required String enderecoNumero,
     String? enderecoComplemento,
-    required String responsavelNome,
-    String? responsavelCpf,
-    String? responsavelTelefone,
   }) async {
     try {
       final response = await client.functions.invoke(
@@ -91,9 +69,10 @@ class AuthService {
         body: {
           'email': email,
           'password': password,
-          'nome_estudio': nomeEstudio,
-          'cnpj': cnpj,
+          'nome': nome,
           'telefone': telefone,
+          'cpf_cnpj': cpfCnpj,
+          'nome_legal': nomeLegal,
           'endereco_cep': enderecoCep,
           'endereco_rua': enderecoRua,
           'endereco_cidade': enderecoCidade,
@@ -101,9 +80,6 @@ class AuthService {
           'endereco_bairro': enderecoBairro,
           'endereco_numero': enderecoNumero,
           'endereco_complemento': enderecoComplemento,
-          'responsavel_nome': responsavelNome,
-          'responsavel_cpf': responsavelCpf,
-          'responsavel_telefone': responsavelTelefone,
         },
       );
 

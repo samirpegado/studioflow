@@ -94,7 +94,7 @@ class _BookingCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    booking.studio?.nomeEstudio ?? 'Estúdio',
+                    booking.studio?.nome ?? 'Estúdio',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),

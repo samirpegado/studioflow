@@ -8,6 +8,8 @@ import '../../../core/services/auth_service.dart';
 import '../../../core/services/cep_service.dart';
 import '../../../core/utils/responsive.dart';
 
+enum TipoDocumento { cpf, cnpj }
+
 class RegisterStudioPage extends StatefulWidget {
   const RegisterStudioPage({super.key});
 
@@ -17,10 +19,11 @@ class RegisterStudioPage extends StatefulWidget {
 
 class _RegisterStudioPageState extends State<RegisterStudioPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nomeEstudioController = TextEditingController();
-  final _cnpjController = TextEditingController();
-  final _telefoneController = TextEditingController();
+  final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
+  final _telefoneController = TextEditingController();
+  final _cpfCnpjController = TextEditingController();
+  final _nomeLegalController = TextEditingController();
   final _cepController = TextEditingController();
   final _ruaController = TextEditingController();
   final _cidadeController = TextEditingController();
@@ -28,16 +31,15 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
   final _bairroController = TextEditingController();
   final _numeroController = TextEditingController();
   final _complementoController = TextEditingController();
-  final _responsavelNomeController = TextEditingController();
-  final _responsavelCpfController = TextEditingController();
-  final _responsavelTelefoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
   final _telefoneFormatter = MaskTextInputFormatter(mask: '(##) #####-####');
   final _cepFormatter = MaskTextInputFormatter(mask: '#####-###');
   final _cpfFormatter = MaskTextInputFormatter(mask: '###.###.###-##');
+  final _cnpjFormatter = MaskTextInputFormatter(mask: '##.###.###/####-##');
 
+  TipoDocumento _tipoDocumento = TipoDocumento.cpf;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoadingCep = false;
@@ -53,17 +55,17 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
   @override
   void initState() {
     super.initState();
-    // Listener para buscar CEP quando completo
     _cepController.addListener(_onCepChanged);
   }
 
   @override
   void dispose() {
     _cepController.removeListener(_onCepChanged);
-    _nomeEstudioController.dispose();
-    _cnpjController.dispose();
-    _telefoneController.dispose();
+    _nomeController.dispose();
     _emailController.dispose();
+    _telefoneController.dispose();
+    _cpfCnpjController.dispose();
+    _nomeLegalController.dispose();
     _cepController.dispose();
     _ruaController.dispose();
     _cidadeController.dispose();
@@ -71,18 +73,14 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
     _bairroController.dispose();
     _numeroController.dispose();
     _complementoController.dispose();
-    _responsavelNomeController.dispose();
-    _responsavelCpfController.dispose();
-    _responsavelTelefoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
+
   Future<void> _onCepChanged() async {
     final cep = _cepFormatter.getUnmaskedText();
-
-    // Busca CEP quando tiver 8 dígitos
     if (cep.length == 8) {
       await _buscarCep(cep);
     }
@@ -97,7 +95,6 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
       final endereco = await CepService.buscarCep(cep);
 
       if (endereco != null && mounted) {
-        // Preenche os campos com os dados retornados
         _ruaController.text = endereco['logradouro'] ?? '';
         _bairroController.text = endereco['bairro'] ?? '';
         _cidadeController.text = endereco['localidade'] ?? '';
@@ -152,38 +149,22 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
     final authService = AuthService();
 
     try {
-      // Remove formatação do CNPJ e CPF
-      final cnpjLimpo = _cnpjController.text.replaceAll(RegExp(r'[^0-9]'), '');
-      final cpfLimpo = _responsavelCpfController.text.replaceAll(
-        RegExp(r'[^0-9]'),
-        '',
-      );
+      final cpfCnpjLimpo = _cpfCnpjController.text.replaceAll(RegExp(r'[^0-9]'), '');
 
-      // Chamar Edge Function para registro
       final response = await authService.registerStudio(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        nomeEstudio: _nomeEstudioController.text.trim(),
-        cnpj: cnpjLimpo.isNotEmpty ? cnpjLimpo : null,
+        nome: _nomeController.text.trim(),
         telefone: _telefoneFormatter.getUnmaskedText(),
+        cpfCnpj: cpfCnpjLimpo,
+        nomeLegal: _nomeLegalController.text.trim(),
         enderecoCep: _cepFormatter.getUnmaskedText(),
         enderecoRua: _ruaController.text.trim(),
         enderecoCidade: _cidadeController.text.trim(),
         enderecoUf: _ufController.text.trim().toUpperCase(),
         enderecoBairro: _bairroController.text.trim(),
-        enderecoNumero: _numeroController.text.trim().isNotEmpty
-            ? _numeroController.text.trim()
-            : null,
-        enderecoComplemento: _complementoController.text.trim().isNotEmpty
-            ? _complementoController.text.trim()
-            : null,
-        responsavelNome: _responsavelNomeController.text.trim(),
-        responsavelCpf: cpfLimpo.isNotEmpty ? cpfLimpo : null,
-        responsavelTelefone: _responsavelTelefoneController.text
-                .trim()
-                .isNotEmpty
-            ? _responsavelTelefoneController.text.trim()
-            : null,
+        enderecoNumero: _numeroController.text.trim(),
+        enderecoComplemento: _complementoController.text.trim().isNotEmpty ? _complementoController.text.trim() : null,
       );
 
       if (!mounted) {
@@ -194,14 +175,12 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
       }
 
       if (response.success) {
-        // Fazer login após registro bem-sucedido
         final loginSuccess = await authProvider.signIn(
           _emailController.text.trim(),
           _passwordController.text,
         );
 
         if (loginSuccess) {
-          await authProvider.loadUser(authProvider.user!.id);
           if (!mounted) {
             setState(() {
               _isRegistering = false;
@@ -220,7 +199,7 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
             _isRegistering = false;
           });
 
-          context.go('/studio');
+          context.go('/loading');
           return;
         } else {
           if (!mounted) {
@@ -230,9 +209,8 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
             return;
           }
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  'Conta criada, mas erro ao fazer login. Tente fazer login manualmente.'),
+            const SnackBar(
+              content: Text('Conta criada, mas erro ao fazer login. Tente fazer login manualmente.'),
               backgroundColor: Colors.orange,
             ),
           );
@@ -292,49 +270,28 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                       Text(
                         'Cadastrar Estúdio',
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 32),
+                      
+                      // Seção: Dados do Estúdio
                       Text(
                         'Dados do Estúdio',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
-                        controller: _nomeEstudioController,
+                        controller: _nomeController,
                         decoration: const InputDecoration(
-                          labelText: 'Nome do Estúdio',
+                          labelText: 'Nome',
                           prefixIcon: Icon(Icons.business),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Nome do estúdio obrigatório';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _cnpjController,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          _CnpjFormatter(),
-                        ],
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'CNPJ',
-                          prefixIcon: Icon(Icons.badge),
-                          hintText: '00.000.000/0000-00',
-                        ),
-                        validator: (value) {
-                          if (value != null && value.isNotEmpty) {
-                            final cnpjLimpo = value.replaceAll(RegExp(r'[^0-9]'), '');
-                            if (cnpjLimpo.length != 14) {
-                              return 'CNPJ deve ter 14 dígitos';
-                            }
+                            return 'Nome obrigatório';
                           }
                           return null;
                         },
@@ -370,17 +327,100 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                           if (value == null || value.isEmpty) {
                             return 'Telefone obrigatório';
                           }
+                          final telefoneLimpo = value.replaceAll(RegExp(r'[^0-9]'), '');
+                          if (telefoneLimpo.length < 10) {
+                            return 'Telefone inválido';
+                          }
                           return null;
                         },
                       ),
+                      
                       const SizedBox(height: 24),
                       const Divider(),
                       const SizedBox(height: 16),
+                      
+                      // Seção: Dados Legais
                       Text(
-                        'Endereço',
+                        'Dados Legais',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SegmentedButton<TipoDocumento>(
+                        segments: const [
+                          ButtonSegment(
+                            value: TipoDocumento.cpf,
+                            label: Text('CPF'),
+                            icon: Icon(Icons.person),
+                          ),
+                          ButtonSegment(
+                            value: TipoDocumento.cnpj,
+                            label: Text('CNPJ'),
+                            icon: Icon(Icons.business),
+                          ),
+                        ],
+                        selected: {_tipoDocumento},
+                        onSelectionChanged: (Set<TipoDocumento> newSelection) {
+                          setState(() {
+                            _tipoDocumento = newSelection.first;
+                            _cpfCnpjController.clear();
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _cpfCnpjController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          _tipoDocumento == TipoDocumento.cpf ? _cpfFormatter : _cnpjFormatter,
+                        ],
+                        key: ValueKey(_tipoDocumento), // Força rebuild quando o tipo mudar
+                        decoration: InputDecoration(
+                          labelText: _tipoDocumento == TipoDocumento.cpf ? 'CPF' : 'CNPJ',
+                          prefixIcon: const Icon(Icons.badge),
+                          hintText: _tipoDocumento == TipoDocumento.cpf ? '000.000.000-00' : '00.000.000/0000-00',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return _tipoDocumento == TipoDocumento.cpf ? 'CPF obrigatório' : 'CNPJ obrigatório';
+                          }
+                          final limpo = value.replaceAll(RegExp(r'[^0-9]'), '');
+                          if (_tipoDocumento == TipoDocumento.cpf && limpo.length != 11) {
+                            return 'CPF deve ter 11 dígitos';
+                          }
+                          if (_tipoDocumento == TipoDocumento.cnpj && limpo.length != 14) {
+                            return 'CNPJ deve ter 14 dígitos';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _nomeLegalController,
+                        decoration: InputDecoration(
+                          labelText: _tipoDocumento == TipoDocumento.cpf ? 'Responsável Legal' : 'Razão Social',
+                          prefixIcon: const Icon(Icons.person),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return _tipoDocumento == TipoDocumento.cpf ? 'Responsável Legal obrigatório' : 'Razão Social obrigatória';
+                          }
+                          return null;
+                        },
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      
+                      // Seção: Endereço
+                      Text(
+                        'Endereço do Estúdio',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -420,8 +460,8 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                           child: Text(
                             'Buscando endereço...',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                           ),
                         ),
                       const SizedBox(height: 16),
@@ -448,6 +488,12 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                               decoration: const InputDecoration(
                                 labelText: 'Número',
                               ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Número obrigatório';
+                                }
+                                return null;
+                              },
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -524,68 +570,12 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                           ),
                         ],
                       ),
+                      
                       const SizedBox(height: 24),
                       const Divider(),
                       const SizedBox(height: 16),
-                      Text(
-                        'Dados do Responsável',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _responsavelNomeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nome do Responsável',
-                          prefixIcon: Icon(Icons.person),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Nome do responsável obrigatório';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _responsavelCpfController,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          _cpfFormatter,
-                        ],
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'CPF do Responsável',
-                          prefixIcon: Icon(Icons.badge_outlined),
-                          hintText: '000.000.000-00',
-                        ),
-                        validator: (value) {
-                          if (value != null && value.isNotEmpty) {
-                            final cpfLimpo = value.replaceAll(RegExp(r'[^0-9]'), '');
-                            if (cpfLimpo.length != 11) {
-                              return 'CPF deve ter 11 dígitos';
-                            }
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _responsavelTelefoneController,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          MaskTextInputFormatter(mask: '(##) #####-####'),
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Telefone do Responsável',
-                          prefixIcon: Icon(Icons.phone),
-                          hintText: 'Opcional',
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Divider(),
-                      const SizedBox(height: 16),
+                      
+                      // Seção: Senha
                       TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
@@ -607,7 +597,7 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Senha obrigatória';
+                            return 'Por favor, insira sua senha';
                           }
                           if (value.length < 6) {
                             return 'Senha deve ter pelo menos 6 caracteres';
@@ -637,7 +627,7 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Confirmação de senha obrigatória';
+                            return 'Por favor, confirme sua senha';
                           }
                           if (value != _passwordController.text) {
                             return 'Senhas não coincidem';
@@ -665,8 +655,7 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
                                   width: 24,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2.5,
-                                    valueColor:
-                                        AlwaysStoppedAnimation<Color>(Colors.white),
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
                                 )
                               : const Text(
@@ -696,45 +685,3 @@ class _RegisterStudioPageState extends State<RegisterStudioPage> {
     );
   }
 }
-
-/// Formatter para CNPJ
-class _CnpjFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final text = newValue.text;
-
-    // Remove tudo que não é dígito
-    final digitsOnly = text.replaceAll(RegExp(r'[^0-9]'), '');
-
-    if (digitsOnly.isEmpty) {
-      return newValue.copyWith(text: '');
-    }
-
-    // Limita a 14 dígitos para CNPJ
-    final limitedDigits = digitsOnly.length > 14 ? digitsOnly.substring(0, 14) : digitsOnly;
-
-    String formatted;
-
-    if (limitedDigits.length <= 2) {
-      formatted = limitedDigits;
-    } else if (limitedDigits.length <= 5) {
-      formatted = '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2)}';
-    } else if (limitedDigits.length <= 8) {
-      formatted = '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2, 5)}.${limitedDigits.substring(5)}';
-    } else if (limitedDigits.length <= 12) {
-      formatted = '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2, 5)}.${limitedDigits.substring(5, 8)}/${limitedDigits.substring(8)}';
-    } else {
-      // Para CNPJ completo (14 dígitos)
-      formatted = '${limitedDigits.substring(0, 2)}.${limitedDigits.substring(2, 5)}.${limitedDigits.substring(5, 8)}/${limitedDigits.substring(8, 12)}-${limitedDigits.substring(12)}';
-    }
-
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
-}
-

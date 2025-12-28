@@ -9,6 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/pages/login_page.dart';
 import 'features/auth/pages/register_page.dart';
 import 'features/auth/pages/register_studio_page.dart';
+import 'features/auth/pages/loading_page.dart';
 import 'features/client/pages/client_home_page.dart';
 import 'features/studio/pages/studio_home_page.dart';
 import 'features/splash/pages/splash_page.dart';
@@ -63,6 +64,10 @@ final GoRouter _router = GoRouter(
     GoRoute(
       path: '/register-studio',
       builder: (context, state) => const RegisterStudioPage(),
+    ),
+    GoRoute(
+      path: '/loading',
+      builder: (context, state) => const LoadingPage(),
     ),
     GoRoute(
       path: '/client',

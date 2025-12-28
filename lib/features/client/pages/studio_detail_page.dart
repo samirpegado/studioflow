@@ -27,7 +27,7 @@ class _StudioDetailPageState extends State<StudioDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.studio.nomeEstudio),
+        title: Text(widget.studio.nome ?? 'Estúdio'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -42,67 +42,34 @@ class _StudioDetailPageState extends State<StudioDetailPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.studio.nomeEstudio,
+                        widget.studio.nome ?? 'Estúdio',
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              widget.studio.enderecoCompleto,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.phone, size: 16, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.studio.telefone,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.email, size: 16, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.studio.email,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                      if (widget.studio.mediaAvaliacoes != null) ...[
+                      if (widget.studio.telefone != null) ...[
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            Icon(Icons.star, color: Colors.amber, size: 20),
+                            Icon(Icons.phone, size: 16, color: Colors.grey[600]),
                             const SizedBox(width: 4),
                             Text(
-                              widget.studio.mediaAvaliacoes!.toStringAsFixed(1),
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              widget.studio.telefone!,
+                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
-                            if (widget.studio.totalAvaliacoes != null) ...[
-                              const SizedBox(width: 4),
-                              Text(
-                                '(${widget.studio.totalAvaliacoes} avaliações)',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
+                          ],
+                        ),
+                      ],
+                      if (widget.studio.email != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.email, size: 16, color: Colors.grey[600]),
+                            const SizedBox(width: 4),
+                            Text(
+                              widget.studio.email!,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
                           ],
                         ),
                       ],

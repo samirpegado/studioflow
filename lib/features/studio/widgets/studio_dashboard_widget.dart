@@ -33,18 +33,20 @@ class StudioDashboardWidget extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Bem-vindo, ${studioProvider.studio!.nomeEstudio}!',
+                    'Bem-vindo, ${studioProvider.studio!.nome ?? 'Estúdio'}!',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    studioProvider.studio!.enderecoCompleto,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
+                  if (studioProvider.studio!.email != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      studioProvider.studio!.email!,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[600],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

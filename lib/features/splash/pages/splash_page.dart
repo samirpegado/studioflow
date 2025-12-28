@@ -25,13 +25,7 @@ class _SplashPageState extends State<SplashPage> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
     if (authProvider.isAuthenticated) {
-      if (authProvider.isStudio) {
-        context.go('/studio');
-      } else if (authProvider.isClient) {
-        context.go('/client');
-      } else {
-        context.go('/login');
-      }
+      context.go('/loading');
     } else {
       context.go('/login');
     }

@@ -14,8 +14,6 @@ class StudioSearchWidget extends StatefulWidget {
 
 class _StudioSearchWidgetState extends State<StudioSearchWidget> {
   final _searchController = TextEditingController();
-  double? _latitude;
-  double? _longitude;
   bool _isLoadingLocation = false;
 
   @override
@@ -52,11 +50,9 @@ class _StudioSearchWidgetState extends State<StudioSearchWidget> {
 
       if (permission == LocationPermission.deniedForever) return;
 
-      Position position = await Geolocator.getCurrentPosition();
-      setState(() {
-        _latitude = position.latitude;
-        _longitude = position.longitude;
-      });
+      // Obter localização para uso futuro
+      // Position position = await Geolocator.getCurrentPosition();
+      // TODO: Implementar busca por proximidade usando tabela enderecos
 
       _searchStudios();
     } catch (e) {

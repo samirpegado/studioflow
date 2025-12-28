@@ -27,8 +27,8 @@ class _StudioHomePageState extends State<StudioHomePage> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final studioProvider = Provider.of<StudioProvider>(context, listen: false);
     
-    if (authProvider.isAuthenticated && authProvider.user != null) {
-      await studioProvider.loadStudio(authProvider.user!.id);
+    if (authProvider.isAuthenticated && authProvider.studio != null) {
+      await studioProvider.loadStudio(authProvider.studio!.id);
     }
   }
 
@@ -39,7 +39,7 @@ class _StudioHomePageState extends State<StudioHomePage> {
         title: Consumer<StudioProvider>(
           builder: (context, studioProvider, _) {
             return Text(
-              studioProvider.studio?.nomeEstudio ?? 'StudioFlow',
+              studioProvider.studio?.nome ?? 'StudioFlow',
             );
           },
         ),
